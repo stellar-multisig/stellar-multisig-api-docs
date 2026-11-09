@@ -1,0 +1,10 @@
+{
+  "projectId": "stellar-multisig-api-docs",
+  "orgId": "stellar-multisig",
+  "preferredRuntime": "node20",
+  "framework": "next.js",
+  "buildCommand": "npm run build",
+  "devCommand": "npm run dev",
+  "installCommand": "npm install",
+  "rootDirectory": "docs"
+}
