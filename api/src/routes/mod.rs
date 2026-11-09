@@ -86,8 +86,13 @@ impl IntoResponse for ApiError {
     }
 }
 
+pub async fn health_check() -> axum::Json<serde_json::Value> {
+    axum::Json(serde_json::json!({ "status": "ok" }))
+}
+
 pub fn routes(state: Arc<AppState>) -> Router {
     Router::new()
+        .route("/health", get(health_check))
         .route("/proposals", post(crate::routes::proposals::create_proposal))
         .route("/proposals/:id", get(crate::routes::proposals::get_proposal))
         .route(
