@@ -48,6 +48,24 @@ npm run dev
 npm run build
 ```
 
+## Pull Request Process
+
+1. Fork the repository and create a feature branch from `main`
+2. Make your changes in `docs/` only
+3. Ensure `npm run build` passes in `docs/`
+4. Open a pull request against `main`
+5. A maintainer will review and merge
+
+PRs touching `api/` will be closed without review.
+
+## Commit Convention
+
+Use conventional commit prefixes:
+
+- `feat(docs):` — new documentation page
+- `fix(docs):` — documentation fix
+- `chore(docs):` — documentation maintenance
+
 ## Sister repositories
 
 - [Contracts](https://github.com/stellar-multisig/stellar-multisig-contracts)
