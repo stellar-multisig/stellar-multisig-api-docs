@@ -1,0 +1,101 @@
+# Security Model
+
+The Stellar Multisig Coordinator API is a **signing coordinator**, not a signer.
+It collects signatures from external parties and determines when a transaction
+is ready to submit. It never sees, stores, or handles secret keys.
+
+## What the coordinator can do
+
+- Accept and store pending multisig proposals (XDR + metadata)
+- Verify each signature against the transaction hash recomputed from the
+  stored XDR and network passphrase
+- Confirm each signer is a current signer of the account, using live network
+  data
+- Reject duplicate signatures from the same signer
+- Sum signer weights and compare against account thresholds
+- Submit the transaction when the threshold is met
+- Reject expired proposals and proposals past their time bounds
+
+## What the coordinator cannot do
+
+- **It cannot sign transactions.** It has no access to any secret key.
+- **It cannot alter a transaction.** The XDR is stored as-is and resubmitted
+  exactly as received.
+- **It cannot bypass the threshold.** Submission is gated on cryptographic
+  verification and live on-chain state.
+- **It cannot forge signatures.** Every signature is independently verified
+  with ed25519.
+
+## Trust model
+
+The coordinator follows a **"verify, never trust"** principle:
+
+1. **Recompute the transaction hash** from the stored XDR and network
+   passphrase. Never accept a hash from the client.
+2. **Verify every ed25519 signature** against that recomputed hash.
+3. **Fetch signer metadata live from Horizon.** The set of signers and their
+   weights is never taken from the request body.
+4. **Reject duplicate signatures.** A signer can contribute at most once.
+5. **Weighted threshold checks.** Readiness is computed by summing signer
+   weights against the account's threshold for the operation category
+   (low/medium/high).
+6. **Re-check readiness immediately before submit.** Signers or thresholds
+   may have changed on-chain since the signatures were collected.
+7. **Reject expired proposals** and proposals whose transaction time bounds
+   have passed.
+8. **Reject any request containing a secret key.** The API never receives or
+   stores secret key material.
+
+## Threats and mitigations
+
+| Threat | Mitigation |
+|--------|------------|
+| Replay of a previously collected signature | Duplicate signatures are rejected by signer address |
+| Signature from a non-signer | Signer set is fetched from Horizon, not the request |
+| Weight inflation attack | Signer weights are fetched from Horizon |
+| Threshold lowered after signing | Readiness is re-checked against fresh network state before submit |
+| Expired transaction resubmitted | Proposal expiry and transaction time bounds are enforced |
+| Client submits a forged transaction hash | Hash is recomputed from stored XDR + network passphrase |
+| Secret key leakage via API | Secret keys are rejected; none are ever stored |
+| Signer removed on-chain after signing | Readiness recomputed before submit using live state |
+
+## Verification rules
+
+For every signature added to a proposal:
+
+1. Recompute the transaction hash from the stored XDR and network passphrase;
+   verify the ed25519 signature against that hash.
+2. Confirm the signing key is a current signer on the account, fetched from
+   the network — not from the request.
+3. Reject duplicate signatures from the same signer.
+4. Compute readiness by summing signer weights against the account's threshold
+   for the operation category (low/medium/high), using data fetched from the
+   network.
+5. Re-check readiness against fresh network state immediately before submit;
+   signers or thresholds may have changed since signing.
+6. Reject proposals past their expiry or past the transaction's time bounds.
+
+## API boundary
+
+```
+Client                    Coordinator              Horizon (Network)
+  │                           │                          │
+  ├──── POST /proposals ─────>│                          │
+  │                           │ store XDR                │
+  │                           ├──── GET /accounts ──────>│
+  │                           │<── signers/thresholds ──┤
+  ├──── POST /signatures ────>│                          │
+  │                           │ verify sig (XDR+passphrase)│
+  │                           │ check signer (Horizon)   │
+  │                           │ store signature          │
+  ├──── POST /submit ────────>│                          │
+  │                           │ re-check readiness       │
+  │                           ├──── GET /accounts ──────>│
+  │                           │<── fresh signers ───────┤
+  │                           │ submit XDR to network    │
+  │                           └──── POST tx ────────────>│
+```
+
+The coordinator is a **stateless verification layer** between clients and the
+Stellar network. It adds no signing capability of its own — it only
+orchestrates and validates.
