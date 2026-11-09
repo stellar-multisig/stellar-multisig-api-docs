@@ -108,3 +108,81 @@ pub async fn mark_submitted(pool: &SqlitePool, id: i64) -> Result<Proposal, sqlx
         .await?;
     get_proposal(pool, id).await
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::models::CreateProposal;
+
+    async fn test_pool() -> SqlitePool {
+        SqlitePool::connect("sqlite::memory:").await.unwrap()
+    }
+
+    #[tokio::test]
+    async fn test_create_and_get_proposal() {
+        let pool = test_pool().await;
+        sqlx::migrate!("./migrations").run(&pool).await.unwrap();
+
+        let proposal = create_proposal(
+            &pool,
+            &CreateProposal {
+                network: "testnet".to_string(),
+                account: "GD...".to_string(),
+                xdr: "AAAA".to_string(),
+                category: "medium".to_string(),
+                expiry: 9999999999,
+            },
+        )
+        .await
+        .unwrap();
+
+        assert_eq!(proposal.network, "testnet");
+        assert_eq!(proposal.status, "pending");
+        assert_eq!(proposal.id, 1);
+
+        let fetched = get_proposal(&pool, proposal.id).await.unwrap();
+        assert_eq!(fetched.id, proposal.id);
+    }
+
+    #[tokio::test]
+    async fn test_add_and_list_signatures() {
+        let pool = test_pool().await;
+        sqlx::migrate!("./migrations").run(&pool).await.unwrap();
+
+        let proposal = create_proposal(
+            &pool,
+            &CreateProposal {
+                network: "testnet".to_string(),
+                account: "GD...".to_string(),
+                xdr: "AAAA".to_string(),
+                category: "medium".to_string(),
+                expiry: 9999999999,
+            },
+        )
+        .await
+        .unwrap();
+
+        let sig = add_signature(
+            &pool,
+            proposal.id,
+            &crate::models::AddSignature {
+                signer: "GA...".to_string(),
+                signature: "BASE64".to_string(),
+            },
+        )
+        .await
+        .unwrap();
+
+        assert_eq!(sig.signer, "GA...");
+        assert_eq!(sig.proposal_id, proposal.id);
+
+        let sigs = list_signatures(&pool, proposal.id).await.unwrap();
+        assert_eq!(sigs.len(), 1);
+
+        let exists = signature_exists(&pool, proposal.id, "GA...").await.unwrap();
+        assert!(exists);
+
+        let dup = signature_exists(&pool, proposal.id, "GB...").await.unwrap();
+        assert!(!dup);
+    }
+}
