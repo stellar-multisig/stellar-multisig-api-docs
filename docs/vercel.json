@@ -1,0 +1,12 @@
+{
+  "version": 3,
+  "framework": "next.js",
+  "buildCommand": "npm run build",
+  "outputDirectory": ".next",
+  "installCommand": "npm install",
+  "devCommand": "npm run dev",
+  "routes": [
+    { "src": "/docs/(.*)", "dest": "/docs/$1" },
+    { "src": "/(.*)", "dest": "/" }
+  ]
+}

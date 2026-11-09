@@ -1,0 +1,114 @@
+# Integration Guide
+
+This guide covers integrating external services with the Stellar Multisig
+Coordinator API.
+
+## Authentication
+
+The coordinator API is currently unauthenticated. In production, place it
+behind an authentication layer (e.g. OAuth2, API keys, or a reverse proxy
+with access control).
+
+## Rate limiting
+
+Implement rate limiting at the reverse proxy level (e.g. nginx, Cloudflare)
+to prevent spam proposal creation and signature submission.
+
+## Webhooks
+
+The coordinator does not currently emit webhooks. Poll
+`GET /proposals/:id` to monitor proposal status and readiness.
+
+## Idempotency
+
+Signature submission is idempotent per signer — submitting the same
+signature twice from the same signer returns a `409 Conflict` (duplicate).
+
+## Monitoring
+
+Monitor these metrics:
+
+- Proposal creation rate
+- Signature collection rate
+- Threshold met / submit success rate
+- Rejection reasons (invalid sig, not a signer, duplicate, expired)
+- Horizon request latency and error rate
+
+## CI/CD integration
+
+Example GitHub Action step to create a proposal:
+
+```yaml
+- name: Create multisig proposal
+  run: |
+    curl -X POST ${{ secrets.API_URL }}/proposals \
+      -H "Content-Type: application/json" \
+      -d '{
+        "network": "testnet",
+        "account": "${{ secrets.MULTISIG_ACCOUNT }}",
+        "xdr": "${{ steps.build-tx.outputs.xdr }}",
+        "category": "medium",
+        "expiry": ${{ steps.expiry.outputs.timestamp }}
+      }'
+```
+
+## SDK
+
+A TypeScript helper for the API:
+
+```typescript
+class MultisigClient {
+  constructor(private baseUrl: string) {}
+
+  async createProposal(input: {
+    network: string;
+    account: string;
+    xdr: string;
+    category?: "low" | "medium" | "high";
+    expiry: number;
+  }) {
+    const res = await fetch(`${this.baseUrl}/proposals`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(input),
+    });
+    if (!res.ok) throw new Error(await res.text());
+    return res.json();
+  }
+
+  async addSignature(proposalId: number, signer: string, signature: string) {
+    const res = await fetch(
+      `${this.baseUrl}/proposals/${proposalId}/signatures`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ signer, signature }),
+      }
+    );
+    if (!res.ok) throw new Error(await res.text());
+    return res.json();
+  }
+
+  async submit(proposalId: number) {
+    const res = await fetch(
+      `${this.baseUrl}/proposals/${proposalId}/submit`,
+      { method: "POST" }
+    );
+    if (!res.ok) throw new Error(await res.text());
+    return res.json();
+  }
+
+  async getAccount(address: string) {
+    const res = await fetch(`${this.baseUrl}/accounts/${address}`);
+    if (!res.ok) throw new Error(await res.text());
+    return res.json();
+  }
+}
+```
+
+## Sister repositories
+
+- [Contracts](https://github.com/stellar-multisig/stellar-multisig-contracts)
+  — on-chain multisig-account and account-factory Soroban contracts
+- [Web app](https://github.com/stellar-multisig/stellar-multisig-web)
+  — reference frontend for the coordinator API

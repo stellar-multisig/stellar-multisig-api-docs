@@ -1,0 +1,122 @@
+# Web App Guide
+
+This guide explains how to build a web application that integrates with the
+Stellar Multisig Coordinator API.
+
+## Architecture
+
+```
+Browser                  Coordinator API              Stellar Network
+  │                           │                          │
+  ├──── POST /proposals ─────>│                          │
+  │                           │ store + verify           │
+  ├──── POST /signatures ────>│                          │
+  │                           │ collect signatures       │
+  ├──── POST /submit ────────>│                          │
+  │                           │ submit XDR               │
+  │                           └──── submit tx ──────────>│
+```
+
+## Client flow
+
+### 1. Prepare a transaction
+
+Build a Stellar transaction using the Stellar SDK, targeting the multisig
+account as the source. Encode it to XDR.
+
+```typescript
+import { TransactionBuilder, StrKey, Networks } from "stellar-sdk";
+
+const tx = new TransactionBuilder(sourceAccount, {
+  fee: "100",
+  networkPassphrase: Networks.TESTNET,
+})
+  .addOperation(paymentOperation)
+  .setTimeout(300)
+  .build();
+
+const xdr = tx.toXDR(); // base64
+```
+
+### 2. Create a proposal
+
+```typescript
+const res = await fetch("/api/proposals", {
+  method: "POST",
+  headers: { "Content-Type": "application/json" },
+  body: JSON.stringify({
+    network: "testnet",
+    account: multisigAccountId,
+    xdr,
+    category: "medium",
+    expiry: Math.floor(Date.now() / 1000) + 3600,
+  }),
+});
+
+const { id: proposalId } = await res.json();
+```
+
+### 3. Collect signatures
+
+Each signer signs the transaction hash using their secret key (in a secure
+wallet, never in the browser unless using a hardware wallet):
+
+```typescript
+// Signer-side (wallet)
+const hash = StellarSdk.hash(tx); // the transaction hash
+const signature = keypair.sign(hash).toString("base64");
+
+// Submit to coordinator
+await fetch(`/api/proposals/${proposalId}/signatures`, {
+  method: "POST",
+  headers: { "Content-Type": "application/json" },
+  body: JSON.stringify({ signer: publicKey, signature }),
+});
+```
+
+### 4. Check readiness
+
+```typescript
+const proposal = await fetch(`/api/proposals/${proposalId}`).then(r =>
+  r.json()
+);
+
+if (proposal.readiness.threshold_met) {
+  // Ready to submit
+}
+```
+
+### 5. Submit
+
+```typescript
+const submitRes = await fetch(`/api/proposals/${proposalId}/submit`, {
+  method: "POST",
+});
+const { status } = await submitRes.json();
+```
+
+## UI considerations
+
+- Show a signature collection progress bar (signed weight vs threshold)
+- Disable submit until `threshold_met` is true
+- Show which signers have signed
+- Display expiry countdown
+- Handle errors: expired, not a signer, duplicate signature, threshold not met
+
+## Error handling
+
+```typescript
+try {
+  const res = await fetch(`/api/proposals/${id}/submit`, {
+    method: "POST",
+  });
+
+  if (res.status === 422) {
+    const err = await res.json();
+    // "threshold not met: signed weight 1 < threshold 2"
+    showError(err.error);
+  }
+} catch (e) {
+  showError("Network error");
+}
+```
