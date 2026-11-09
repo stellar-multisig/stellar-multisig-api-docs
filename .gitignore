@@ -1,0 +1,13 @@
+# Ignore
+target/
+**/*.rs.bak
+*.db
+*.db-shm
+*.db-wal
+.env
+.env.local
+node_modules/
+.next/
+out/
+dist/
+*.log
