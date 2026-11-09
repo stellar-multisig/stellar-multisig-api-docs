@@ -1,0 +1,144 @@
+# Getting Started
+
+Multisig coordination lets a group of signers jointly authorize Stellar
+transactions without any single key having unilateral control. The Stellar
+Multisig Coordinator API collects signatures, verifies them, and submits the
+transaction when the threshold is met.
+
+## Prerequisites
+
+- A Stellar account funded on [testnet](https://horizon-testnet.stellar.org)
+- The [Stellar CLI](https://developers.stellar.org/docs/tools/cli) (`soroban-cli`)
+- `curl` or an HTTP client
+
+## Step 1: Create signers
+
+Generate three ed25519 keypairs on testnet:
+
+```bash
+soroban keys generate --network testnet --global signer-a
+soroban keys generate --network testnet --global signer-b
+soroban keys generate --network testnet --global signer-c
+```
+
+Get their public keys:
+
+```bash
+soroban keys show --global signer-a
+soroban keys show --global signer-b
+soroban keys show --global signer-c
+```
+
+## Step 2: Create a 2-of-3 multisig account
+
+Use the multisig-account contract from the
+[stellar-multisig-contracts](https://github.com/stellar-multisig/stellar-multisig-contracts)
+repo to deploy a 2-of-3 multisig account with the three signers.
+
+The account will have thresholds: low=1, medium=2, high=3.
+
+## Step 3: Create a proposal
+
+Prepare a transaction XDR (e.g. a payment from the multisig account) and
+submit it to the coordinator:
+
+```bash
+curl -X POST https://api.stellar-multisig.example/proposals \
+  -H "Content-Type: application/json" \
+  -d '{
+    "network": "testnet",
+    "account": "GD...multisig-account...",
+    "xdr": "AAAA...base64-encoded-transaction-envelope...",
+    "category": "medium",
+    "expiry": 1735689600
+  }'
+```
+
+Response:
+
+```json
+{
+  "id": 1,
+  "network": "testnet",
+  "account": "GD...multisig-account...",
+  "expiry": 1735689600,
+  "status": "pending",
+  "signatures": [],
+  "readiness": {
+    "category": "medium",
+    "signed_weight": 0,
+    "threshold": 2,
+    "threshold_met": false
+  }
+}
+```
+
+## Step 4: Collect two signatures
+
+Each signer signs the transaction hash and submits their signature:
+
+```bash
+# Signer A signs
+curl -X POST https://api.stellar-multisig.example/proposals/1/signatures \
+  -H "Content-Type: application/json" \
+  -d '{
+    "signer": "GA...signer-a...",
+    "signature": "BASE64_SIGNATURE_FROM_SIGNER_A"
+  }'
+
+# Signer B signs
+curl -X POST https://api.stellar-multisig.example/proposals/1/signatures \
+  -H "Content-Type: application/json" \
+  -d '{
+    "signer": "GB...signer-b...",
+    "signature": "BASE64_SIGNATURE_FROM_SIGNER_B"
+  }'
+```
+
+After each signature, check readiness:
+
+```bash
+curl https://api.stellar-multisig.example/proposals/1
+```
+
+When `threshold_met` is `true`, the proposal is ready to submit.
+
+## Step 5: Submit
+
+```bash
+curl -X POST https://api.stellar-multisig.example/proposals/1/submit
+```
+
+Response:
+
+```json
+{
+  "status": "submitted",
+  "proposal_id": 1,
+  "xdr": "AAAA...",
+  "readiness": {
+    "category": "medium",
+    "signed_weight": 2,
+    "threshold": 2,
+    "threshold_met": true
+  }
+}
+```
+
+The coordinator submits the XDR to the Stellar network. Once included in a
+ledger, the transaction is complete.
+
+## What the coordinator does NOT do
+
+- It never sees or stores secret keys
+- It cannot sign on your behalf
+- It cannot modify the transaction
+- It cannot submit below threshold
+
+## Next steps
+
+- Read the [Security Model](/docs/concepts/security-model) for the
+  verification rules
+- See the [API Reference](/docs/api/overview) for all endpoints
+- Review [Classic Multisig](/docs/concepts/classic-multisig) for weights and
+  thresholds
