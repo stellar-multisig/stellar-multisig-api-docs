@@ -1,0 +1,103 @@
+# Proposals API
+
+## POST /proposals
+
+Create a new multisig proposal.
+
+### Request
+
+```json
+{
+  "network": "testnet",
+  "account": "GD...multisig-account...",
+  "xdr": "AAAA...base64-encoded-transaction-envelope...",
+  "category": "medium",
+  "expiry": 1735689600
+}
+```
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `network` | string | Yes | `"testnet"` or `"pubnet"` |
+| `account` | string | Yes | Multisig account address (strkey `G...`) |
+| `xdr` | string | Yes | Base64-encoded transaction envelope XDR |
+| `category` | string | No | `"low"`, `"medium"`, or `"high"` (default `"medium"`) |
+| `expiry` | integer | Yes | Unix timestamp when the proposal expires |
+
+### Response
+
+```json
+{
+  "id": 1,
+  "network": "testnet",
+  "account": "GD...multisig-account...",
+  "expiry": 1735689600,
+  "status": "pending",
+  "signatures": [],
+  "readiness": {
+    "category": "medium",
+    "signed_weight": 0,
+    "threshold": 2,
+    "threshold_met": false
+  }
+}
+```
+
+### Errors
+
+- `400` — invalid XDR, invalid public key, secret key in request
+- `422` — proposal expired, transaction time bounds passed
+
+## GET /proposals/:id
+
+Get proposal detail, including all collected signatures and current
+readiness.
+
+### Response
+
+```json
+{
+  "id": 1,
+  "network": "testnet",
+  "account": "GD...multisig-account...",
+  "expiry": 1735689600,
+  "status": "pending",
+  "signatures": [
+    {
+      "id": 1,
+      "signer": "GA...signer-a...",
+      "signature": "BASE64...",
+      "created_at": 1735680000
+    }
+  ],
+  "readiness": {
+    "category": "medium",
+    "signed_weight": 1,
+    "threshold": 2,
+    "threshold_met": false
+  }
+}
+```
+
+### Errors
+
+- `404` — proposal not found
+
+## GET /accounts/:address/proposals
+
+List all proposals for a multisig account.
+
+### Response
+
+```json
+[
+  {
+    "id": 1,
+    "network": "testnet",
+    "account": "GD...multisig-account...",
+    "expiry": 1735689600,
+    "status": "pending",
+    "created_at": 1735680000
+  }
+]
+```

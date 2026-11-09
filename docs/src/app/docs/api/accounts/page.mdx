@@ -1,0 +1,76 @@
+# Accounts API
+
+## GET /accounts/:address
+
+Get a Stellar account's signers, weights, and thresholds live from Horizon.
+
+### Response
+
+```json
+{
+  "address": "GD...multisig-account...",
+  "signers": [
+    { "key": "GA...signer-a...", "weight": 1 },
+    { "key": "GB...signer-b...", "weight": 1 },
+    { "key": "GC...signer-c...", "weight": 1 }
+  ],
+  "thresholds": {
+    "low": 1,
+    "medium": 2,
+    "high": 3
+  }
+}
+```
+
+### Errors
+
+- `404` — account not found on the configured network
+- `502` — Horizon request failed
+
+## TypeScript example
+
+```typescript
+interface Signer {
+  key: string;
+  weight: number;
+}
+
+interface Thresholds {
+  low: number;
+  medium: number;
+  high: number;
+}
+
+interface AccountInfo {
+  address: string;
+  signers: Signer[];
+  thresholds: Thresholds;
+}
+
+async function getAccount(address: string): Promise<AccountInfo> {
+  const res = await fetch(
+    `https://api.stellar-multisig.example/accounts/${address}`
+  );
+
+  if (!res.ok) {
+    const err = await res.json();
+    throw new Error(err.error);
+  }
+
+  return res.json();
+}
+
+// Usage
+const account = await getAccount("GD...multisig-account...");
+console.log(`Threshold medium: ${account.thresholds.medium}`);
+console.log(`Signer count: ${account.signers.length}`);
+```
+
+## curl example
+
+```bash
+curl https://api.stellar-multisig.example/accounts/GD...multisig-account...
+```
+
+This data is fetched live from Horizon on every request — the coordinator
+never caches signer sets or thresholds.

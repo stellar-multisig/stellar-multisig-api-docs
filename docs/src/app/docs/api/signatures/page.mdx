@@ -1,0 +1,75 @@
+# Signatures API
+
+## POST /proposals/:id/signatures
+
+Add a signer's signature to a proposal.
+
+### Request
+
+```json
+{
+  "signer": "GA...signer...",
+  "signature": "BASE64_ED25519_SIGNATURE"
+}
+```
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `signer` | string | Yes | Signer's public key (strkey `G...`) |
+| `signature` | string | Yes | Base64-encoded ed25519 signature (64 bytes) |
+
+### Verification performed
+
+The coordinator performs the following checks on every signature:
+
+1. **Secret key rejection** — the request must not contain any `S...` strkey
+2. **Signer validity** — the signer must be a current signer of the account
+   (fetched from Horizon, not from the request)
+3. **Duplicate rejection** — the same signer cannot sign twice
+4. **Signature verification** — the ed25519 signature is verified against the
+   transaction hash recomputed from the stored XDR and network passphrase
+5. **Expiry check** — the proposal must not be expired
+
+### Response
+
+```json
+{
+  "id": 2,
+  "signer": "GA...signer-b...",
+  "signature": "BASE64...",
+  "created_at": 1735680100
+}
+```
+
+### Errors
+
+- `400` — invalid signature encoding, secret key present, invalid public key
+- `404` — proposal not found, account not found
+- `409` — duplicate signature, proposal not open for signatures
+- `422` — signature invalid, signer not a signer, proposal expired
+
+## TypeScript example
+
+```typescript
+async function addSignature(
+  proposalId: number,
+  signer: string,
+  signatureBase64: string
+) {
+  const res = await fetch(
+    `https://api.stellar-multisig.example/proposals/${proposalId}/signatures`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ signer, signature: signatureBase64 }),
+    }
+  );
+
+  if (!res.ok) {
+    const err = await res.json();
+    throw new Error(err.error);
+  }
+
+  return res.json();
+}
+```

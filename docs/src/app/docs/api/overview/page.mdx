@@ -1,0 +1,85 @@
+# API Overview
+
+The Stellar Multisig Coordinator API is a Rust/Axum service that stores
+pending multisig proposals, verifies and collects signatures, and submits
+when the threshold is met.
+
+## Base URL
+
+```
+https://api.stellar-multisig.example
+```
+
+## Endpoints
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| `POST` | `/proposals` | Create a proposal |
+| `GET` | `/proposals/:id` | Get proposal detail with signatures and readiness |
+| `GET` | `/accounts/:address/proposals` | List proposals for an account |
+| `POST` | `/proposals/:id/signatures` | Add a signer's signature |
+| `POST` | `/proposals/:id/submit` | Submit if threshold met |
+| `GET` | `/accounts/:address` | Get signers, weights, thresholds from network |
+
+## Security model
+
+The coordinator never trusts client claims. Every signature is verified
+against a transaction hash recomputed from the stored XDR and network
+passphrase. Signer metadata is always fetched live from Horizon — never from
+the request. See the [Security Model](/docs/concepts/security-model) for
+details.
+
+## Request format
+
+All endpoints accept and return JSON. Secret keys are never accepted in any
+request.
+
+## Example: create a proposal
+
+```bash
+curl -X POST https://api.stellar-multisig.example/proposals \
+  -H "Content-Type: application/json" \
+  -d '{
+    "network": "testnet",
+    "account": "GD...multisig-account...",
+    "xdr": "AAAA...",
+    "category": "medium",
+    "expiry": 1735689600
+  }'
+```
+
+## Example: add a signature
+
+```bash
+curl -X POST https://api.stellar-multisig.example/proposals/1/signatures \
+  -H "Content-Type: application/json" \
+  -d '{
+    "signer": "GA...signer...",
+    "signature": "BASE64_SIGNATURE..."
+  }'
+```
+
+## Example: submit
+
+```bash
+curl -X POST https://api.stellar-multisig.example/proposals/1/submit
+```
+
+## Error responses
+
+All errors return a JSON body:
+
+```json
+{
+  "error": "human-readable error message"
+}
+```
+
+Common status codes:
+
+- `400 Bad Request` — invalid input (bad XDR, bad public key, secret key present)
+- `404 Not Found` — proposal or account not found
+- `409 Conflict` — duplicate signature, already submitted, proposal closed
+- `422 Unprocessable Entity` — signature invalid, not a signer, expired, threshold not met, time bounds passed
+- `502 Bad Gateway` — Horizon/network request failed
+- `500 Internal Server Error` — unexpected server error
