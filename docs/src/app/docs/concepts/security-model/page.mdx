@@ -99,3 +99,61 @@ Client                    Coordinator              Horizon (Network)
 The coordinator is a **stateless verification layer** between clients and the
 Stellar network. It adds no signing capability of its own — it only
 orchestrates and validates.
+
+## Detailed threat model
+
+### Replay attack
+
+An attacker captures a previously submitted signature and resubmits it.
+
+**Mitigation:** Duplicate signatures from the same signer are rejected. The
+coordinator tracks which signers have signed each proposal and rejects any
+repeat submission.
+
+### Non-signer signature
+
+A client submits a signature from a key that is not a registered signer on
+the account.
+
+**Mitigation:** The signer set is always fetched live from Horizon. The
+coordinator never trusts signer claims from the request body.
+
+### Weight inflation
+
+A client claims a signer has a higher weight than they actually do.
+
+**Mitigation:** Signer weights are fetched live from Horizon, never from the
+request.
+
+### Threshold changed after signing
+
+A signer removes themselves or lowers the threshold on-chain after
+signatures are collected but before submission.
+
+**Mitigation:** Readiness is recomputed against fresh network state
+immediately before `POST /proposals/:id/submit`. If the threshold is no
+longer met, submission is refused.
+
+### Expired transaction
+
+A proposal's transaction has time bounds that have passed, or the proposal
+itself has expired.
+
+**Mitigation:** Both the proposal expiry and the transaction's time bounds
+are checked at signature time and again at submit time.
+
+### Forged transaction hash
+
+A client submits a transaction hash that doesn't match the actual
+transaction contents.
+
+**Mitigation:** The hash is always recomputed from the stored XDR and
+network passphrase. The client never provides a hash.
+
+### Secret key exposure
+
+A client accidentally includes a secret key in an API request.
+
+**Mitigation:** The coordinator rejects any request containing an `S...`
+strkey. Secret keys are never stored or logged.
+
