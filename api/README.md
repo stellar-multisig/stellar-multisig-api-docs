@@ -80,7 +80,9 @@ curl http://localhost:3000/accounts/GD...multisig-account...
 
 The coordinator never trusts client claims. See the [Security Model](../docs/src/app/docs/concepts/security-model/page.mdx).
 
-Verification rules for every signature:
+### Verification rules
+
+For every signature added to a proposal:
 
 1. Recompute the transaction hash from the stored XDR and network passphrase;
    verify the ed25519 signature against that hash.
@@ -90,7 +92,8 @@ Verification rules for every signature:
 4. Compute readiness by summing signer weights against the account's threshold
    for the operation category (low/medium/high), using data fetched from the
    network.
-5. Re-check readiness against fresh network state immediately before submit.
+5. Re-check readiness against fresh network state immediately before submit;
+   signers or thresholds may have changed since signing.
 6. Reject proposals past their expiry or past the transaction's time bounds.
 
 ## Maintainer-only
