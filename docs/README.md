@@ -48,6 +48,8 @@ npm run build
 Deployed to Vercel. Connect this repository to Vercel and set the root
 directory to `docs/`.
 
+The build command is `npm run build` and the output directory is `.next/`.
+
 ## License
 
 MIT
