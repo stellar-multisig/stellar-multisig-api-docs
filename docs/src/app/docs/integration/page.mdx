@@ -106,6 +106,43 @@ class MultisigClient {
 }
 ```
 
+## Usage example
+
+```typescript
+const client = new MultisigClient("https://api.stellar-multisig.example");
+
+// Create a proposal
+const proposal = await client.createProposal({
+  network: "testnet",
+  account: "GD...multisig-account...",
+  xdr: "AAAA...base64-encoded-transaction-envelope...",
+  category: "medium",
+  expiry: Math.floor(Date.now() / 1000) + 3600,
+});
+console.log("Proposal created:", proposal.id);
+
+// Add signatures
+await client.addSignature(proposal.id, "GA...signer-a...", "BASE64_SIG_A");
+await client.addSignature(proposal.id, "GB...signer-b...", "BASE64_SIG_B");
+
+// Check readiness
+const detail = await fetch(
+  `https://api.stellar-multisig.example/proposals/${proposal.id}`
+).then((r) => r.json());
+console.log("Threshold met:", detail.readiness.threshold_met);
+
+// Submit
+if (detail.readiness.threshold_met) {
+  const result = await client.submit(proposal.id);
+  console.log("Submitted:", result.status);
+}
+
+// Get account info
+const account = await client.getAccount("GD...multisig-account...");
+console.log("Signers:", account.signers.length);
+console.log("Medium threshold:", account.thresholds.medium);
+```
+
 ## Sister repositories
 
 - [Contracts](https://github.com/stellar-multisig/stellar-multisig-contracts)
