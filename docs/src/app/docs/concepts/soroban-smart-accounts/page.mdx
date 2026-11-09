@@ -1,0 +1,73 @@
+# Soroban Smart Accounts
+
+A Soroban Smart Account (SAC) is a custom Stellar account that implements the
+`__check_auth` interface. Instead of relying on a single ed25519 keypair for
+authorization, the account's contract verifies signatures itself when the
+Soroban host calls `__check_auth`.
+
+## What a custom account is
+
+In classic Stellar, an account is authorized by a single ed25519 signature.
+In Soroban, an account can be a contract. When any contract calls
+`require_auth(multisig_address)`, the Soroban host invokes
+`__check_auth` on that contract instead of checking a single keypair.
+
+This means a multisig account can authorize:
+
+- Token transfers (SAC or SEP-41)
+- Contract invocations
+- Signer management (add/remove signers, change threshold)
+- Any action requiring `require_auth()` on the multisig address
+
+## How `__check_auth` works
+
+The Soroban host calls:
+
+```
+__check_auth(payload, signatures, contexts)
+```
+
+The contract implementation:
+
+1. Verifies signatures are sorted (ascending public key order, no duplicates)
+2. Verifies each signer is registered on the account
+3. Verifies each ed25519 signature against the 32-byte payload hash using
+   `env.crypto().ed25519_verify()`
+4. Counts valid signatures and compares against the threshold
+5. Returns `true` only if valid signature count >= threshold
+
+## The signature ordering rule
+
+Signatures **must** be submitted in strictly ascending public key order. This
+is a Soroban host requirement — it prevents replay and duplicate counting
+by enforcing a canonical signature order.
+
+```
+✅ Valid order:   [key_A, key_B, key_C]  (ascending)
+❌ Invalid order: [key_C, key_A, key_B]  (not sorted)
+❌ Invalid order: [key_A, key_A, key_B]  (duplicate)
+```
+
+The coordinator does **not** re-order signatures. Clients must collect
+signatures and submit them in ascending public key order. The coordinator
+rejects duplicate signatures from the same signer but does not enforce sort
+order — that is enforced on-chain by `__check_auth`.
+
+## Why ordering matters
+
+Without sorted signatures, the same set of signatures could be submitted in
+different orders, creating distinct transaction hashes and enabling replay
+attacks. Sorting gives a single canonical form for a given set of signers.
+
+## Coordinator integration
+
+The coordinator verifies each signature independently against the transaction
+hash. It does not enforce sort order (that happens on-chain), but it does:
+
+- Verify each ed25519 signature against the recomputed hash
+- Confirm each signer is registered (fetched from Horizon)
+- Reject duplicate signers
+
+When the threshold is met, the coordinator returns the XDR, which the client
+submits to the network. The Soroban host then runs `__check_auth` on-chain
+and enforces the sort order and signature count.

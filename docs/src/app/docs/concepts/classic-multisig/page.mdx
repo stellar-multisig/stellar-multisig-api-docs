@@ -1,0 +1,91 @@
+# Classic Multisig
+
+Classic multisig on Stellar is an **M-of-N threshold scheme** over ed25519
+signatures. A multisig account has a set of signers, each with a weight, and
+three thresholds — one for each operation category:
+
+- **Low** — e.g. setting options, inflation destination
+- **Medium** — e.g. payment, path payment, manage data
+- **High** — e.g. account merge, signing key management
+
+A transaction is authorized when the sum of the weights of valid signatures
+meets or exceeds the threshold for its category.
+
+## Weights and thresholds
+
+Each signer on a Stellar account has an associated `weight` (a `uint32`).
+The account has three `threshold` values, one per category. Authorization
+succeeds when:
+
+```
+sum(weight of valid signers) >= threshold[category]
+```
+
+Thresholds are enforced on-chain by the Stellar protocol itself. The
+coordinator replicates this logic off-chain so it can tell clients when a
+proposal is ready to submit.
+
+## Operation categories
+
+| Category | Typical operations | Example threshold |
+|----------|-------------------|-------------------|
+| low | Set options, inflation destination | 1 |
+| medium | Payment, path payment, manage data | 2 |
+| high | Account merge, signer/threshold changes | 3 |
+
+## Worked example: 2-of-3 multisig
+
+Account `GDAAAA...` has three signers:
+
+| Signer | Weight |
+|--------|--------|
+| A | 1 |
+| B | 1 |
+| C | 1 |
+
+Thresholds: low=1, medium=2, high=3.
+
+### Medium-threshold payment (threshold = 2)
+
+1. Client creates a proposal for a payment transaction (medium category).
+2. Signer A signs → signed weight = 1, threshold = 2 → **not ready**.
+3. Signer B signs → signed weight = 2, threshold = 2 → **ready**.
+4. Coordinator accepts `POST /proposals/:id/submit` and submits the XDR.
+
+### High-threshold signer change (threshold = 3)
+
+Same account, but now changing the signer list (high category, threshold = 3).
+
+1. Client creates a proposal for a set-options transaction modifying signers.
+2. Signers A and B sign → signed weight = 2, threshold = 3 → **not ready**.
+3. Submit is refused with `threshold not met`.
+4. Signer C signs → signed weight = 3, threshold = 3 → **ready**.
+5. Submit succeeds.
+
+### Weighted signers: 3-of-5 with unequal weights
+
+Account with thresholds: medium = 4.
+
+| Signer | Weight |
+|--------|--------|
+| A | 3 |
+| B | 2 |
+| C | 1 |
+| D | 1 |
+| E | 1 |
+
+- A + B signs → weight = 4 → **ready** (meets threshold 4)
+- C + D + E signs → weight = 3 → **not ready**
+- A + C signs → weight = 4 → **ready**
+
+## Coordinator enforcement
+
+The coordinator computes readiness identically to on-chain enforcement:
+
+1. Fetches the account's signers and thresholds from Horizon.
+2. Collects all valid signatures on the proposal.
+3. Sums the weights of the signers who signed.
+4. Compares against the threshold for the proposal's category.
+
+If the sum meets or exceeds the threshold, `POST /proposals/:id/submit` is
+allowed. Otherwise it returns a `422 Unprocessable Entity` error.
