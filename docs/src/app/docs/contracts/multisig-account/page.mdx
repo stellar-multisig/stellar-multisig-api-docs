@@ -1,0 +1,66 @@
+# Multisig Account Contract
+
+The `multisig-account` contract is a Soroban custom account that implements
+`__check_auth` for M-of-N ed25519 signature verification. It is the on-chain
+side of the multisig system coordinated by this API.
+
+## Functions
+
+| Function | Auth Required | Description |
+|----------|---------------|-------------|
+| `init(signers, threshold)` | None (one-time) | Initialize with signer list and threshold |
+| `add_signer(signer)` | Multisig | Add a new signer public key |
+| `remove_signer(signer)` | Multisig | Remove a signer (threshold must remain valid) |
+| `set_threshold(threshold)` | Multisig | Update the M threshold |
+| `get_signers()` | None | Return all registered signer public keys |
+| `get_threshold()` | None | Return current threshold |
+| `__check_auth(payload, sigs, contexts)` | Host-invoked | Verify M-of-N ed25519 signatures |
+
+## `__check_auth` flow
+
+When the Soroban host requires auth on the multisig address:
+
+```
+Host calls multisig.__check_auth(payload, signatures, contexts)
+    ├── Verify signatures sorted (no duplicates)
+    ├── Verify each signer is registered
+    ├── Verify each ed25519 signature against payload hash
+    └── Count valid sigs >= threshold → authorized
+```
+
+## Error codes
+
+| Code | Name | Description |
+|------|------|-------------|
+| 1 | `NotInitialized` | Contract not yet initialized |
+| 2 | `AlreadyInitialized` | `init` called more than once |
+| 3 | `InvalidThreshold` | Threshold is 0 or exceeds signer count |
+| 4 | `UnknownSigner` | Signature from unregistered public key |
+| 5 | `DuplicateSigner` | Duplicate public key in signer list |
+| 6 | `BadSignature` | ed25519 verification failed |
+| 7 | `ThresholdNotMet` | Valid signature count below threshold |
+| 8 | `SignaturesNotSorted` | Signatures not in ascending key order |
+
+## Deployment
+
+Deployed via the `account-factory` contract:
+
+```bash
+soroban contract deploy \
+  --network testnet \
+  --source <your-key> \
+  --wasm target/wasm32-unknown-unknown/release/multisig_account.wasm
+
+soroban contract invoke \
+  --network testnet \
+  --source <your-key> \
+  --id <factory-address> \
+  -- create_account \
+  --creator <your-address> \
+  --salt <salt> \
+  --signers '["<pubkey1>","<pubkey2>","<pubkey3>"]' \
+  --threshold 2
+```
+
+See the [stellar-multisig-contracts](https://github.com/stellar-multisig/stellar-multisig-contracts)
+repo for full contract source.

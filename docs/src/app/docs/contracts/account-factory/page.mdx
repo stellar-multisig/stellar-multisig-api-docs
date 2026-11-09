@@ -1,0 +1,71 @@
+# Account Factory Contract
+
+The `account-factory` contract deploys and tracks multisig accounts on-chain
+using Soroban's deployer API. It enables deterministic account address
+derivation from a factory address and salt.
+
+## Functions
+
+| Function | Auth Required | Description |
+|----------|---------------|-------------|
+| `initialize(admin, wasm_hash)` | None (one-time) | Set admin and multisig WASM hash |
+| `create_account(creator, salt, signers, threshold)` | Creator | Deploy and initialize a new multisig |
+| `get_accounts_by_creator(creator)` | None | List all accounts deployed by an address |
+| `account_count()` | None | Total accounts deployed via this factory |
+| `get_admin()` | None | Return factory admin address |
+| `get_account_wasm_hash()` | None | Return the registered multisig WASM hash |
+
+## Deterministic deployment
+
+The factory uses Soroban's built-in deployer:
+
+```rust
+let deployed_address = env
+    .deployer()
+    .with_current_contract(salt)
+    .deploy(account_wasm_hash);
+```
+
+Given the same factory address and salt, the multisig address is always
+predictable before deployment.
+
+## Error codes
+
+| Code | Name | Description |
+|------|------|-------------|
+| 1 | `AlreadyInitialized` | Factory already initialized |
+| 2 | `NotInitialized` | Factory not yet initialized |
+| 3 | `InvalidThreshold` | Threshold is 0 or exceeds signer count |
+
+## Events
+
+| Event | Data |
+|-------|------|
+| `Initialized` | `(admin, wasm_hash)` |
+| `AccountCreated` | `(creator, address, threshold, signer_count)` |
+
+## Deployment
+
+```bash
+soroban contract upload \
+  --network testnet \
+  --source <your-key> \
+  --wasm target/wasm32-unknown-unknown/release/account_factory.wasm
+
+soroban contract deploy \
+  --network testnet \
+  --source <your-key> \
+  --wasm target/wasm32-unknown-unknown/release/account_factory.wasm
+
+soroban contract invoke \
+  --network testnet \
+  --source <your-key> \
+  --id <factory-address> \
+  -- initialize \
+  --admin <your-address> \
+  --account_wasm_hash <wasm-hash>
+```
+
+See the
+[stellar-multisig-contracts](https://github.com/stellar-multisig/stellar-multisig-contracts)
+repo for full contract source.
